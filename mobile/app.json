@@ -1,0 +1,38 @@
+{
+    "expo": {
+        "name": "sunoji-mobile",
+        "slug": "sunoji-mobile",
+        "version": "1.0.0",
+        "orientation": "portrait",
+        "icon": "./assets/icon.png",
+        "userInterfaceStyle": "light",
+        "splash": {
+            "image": "./assets/splash.png",
+            "resizeMode": "contain",
+            "backgroundColor": "#ffffff"
+        },
+        "assetBundlePatterns": [
+            "**/*"
+        ],
+        "ios": {
+            "supportsTablet": true,
+            "bundleIdentifier": "com.sunoji.mobile",
+            "infoPlist": {
+                "NSMicrophoneUsageDescription": "Sunoji needs access to your microphone to listen to you."
+            }
+        },
+        "android": {
+            "adaptiveIcon": {
+                "foregroundImage": "./assets/adaptive-icon.png",
+                "backgroundColor": "#ffffff"
+            },
+            "package": "com.sunoji.mobile",
+            "permissions": [
+                "android.permission.RECORD_AUDIO"
+            ]
+        },
+        "web": {
+            "favicon": "./assets/favicon.png"
+        }
+    }
+}
