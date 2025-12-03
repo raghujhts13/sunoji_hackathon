@@ -20,7 +20,7 @@ PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
 LOCATION = os.environ.get("GCP_LOCATION", "us-central1")
 if PROJECT_ID:
     vertexai.init(project=PROJECT_ID, location=LOCATION)
-    model = GenerativeModel("gemini-pro") # Or gemini-1.5-flash for speed
+    model = GenerativeModel("gemini-2.5-pro") # Or gemini-1.5-flash for speed
 else:
     model = None # Handle gracefully if env vars missing during dev
 
@@ -59,8 +59,8 @@ async def transcribe_audio(audio_content: bytes) -> str:
         # We might need to adjust encoding/sample_rate based on what the app sends.
         # For now, assuming LINEAR16 or generic.
         config = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16, # Update based on app input
-            sample_rate_hertz=44100, # Update based on app input
+            encoding=speech.RecognitionConfig.AudioEncoding.WEBM_OPUS, # Update based on app input
+            sample_rate_hertz=48000, # Update based on app input
             language_code="en-US",
             enable_automatic_punctuation=True,
         )
@@ -124,10 +124,10 @@ async def synthesize_speech(text: str) -> bytes:
             print("ElevenLabs API key missing, returning dummy audio.")
             return b"dummy_audio"
 
-        audio_generator = elevenlabs_client.generate(
+        audio_generator = elevenlabs_client.text_to_speech.convert(
             text=text,
-            voice="Rachel", # Default voice, can be changed
-            model="eleven_monolingual_v1"
+            voice_id="21m00Tcm4TlvDq8ikWAM", # Rachel voice ID
+            model_id="eleven_multilingual_v2"
         )
         
         # Determine if audio_generator is bytes or iterator
