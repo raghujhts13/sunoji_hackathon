@@ -1,33 +1,44 @@
 import axios from 'axios';
+import * as FileSystem from 'expo-file-system';
 
 // Replace with your backend URL
-const API_BASE_URL = 'http://localhost:8080';
+// For local development: use your computer's IP address (not localhost)
+// For production: use your deployed backend URL
+const API_BASE_URL = 'http://10.0.2.2:8080'; // Android emulator localhost
 
 const api = axios.create({
     baseURL: API_BASE_URL,
+    timeout: 30000, // 30 second timeout for voice processing
 });
 
 // ==================== CHAT ====================
 
-export const sendAudio = async (audioBlob, personaId = null, userLatitude = null, userLongitude = null, isFirstMessage = false) => {
+export const sendAudio = async (audioUri, personaId = null, userLatitude = null, userLongitude = null, isFirstMessage = false) => {
     try {
         const formData = new FormData();
-        formData.append('file', audioBlob, 'recording.webm');
+
+        // For React Native, we need to create a proper file object
+        const fileInfo = await FileSystem.getInfoAsync(audioUri);
+
+        formData.append('file', {
+            uri: audioUri,
+            type: 'audio/m4a',
+            name: 'recording.m4a',
+        });
 
         if (personaId) {
             formData.append('persona_id', personaId);
         }
 
         if (userLatitude !== null && userLongitude !== null) {
-            formData.append('user_latitude', userLatitude);
-            formData.append('user_longitude', userLongitude);
+            formData.append('user_latitude', userLatitude.toString());
+            formData.append('user_longitude', userLongitude.toString());
         }
 
         if (isFirstMessage) {
             formData.append('is_first_message', 'true');
         }
 
-        // Now expecting JSON response with audio_base64
         const response = await api.post('/chat', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
@@ -159,13 +170,9 @@ export const getGreeting = async (personaId = null, timezone = 'Asia/Kolkata') =
     }
 };
 
-// Helper to convert base64 to audio blob for playback
-export const base64ToAudioBlob = (base64) => {
-    const byteCharacters = atob(base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    return new Blob([byteArray], { type: 'audio/mpeg' });
+// Helper to set the API base URL dynamically
+export const setApiBaseUrl = (url) => {
+    api.defaults.baseURL = url;
 };
+
+export default api;
