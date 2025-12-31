@@ -14,9 +14,6 @@ from services import (
     compute_voice_settings,
     get_joke,
     get_quote,
-    # is_weather_query,  # COMMENTED OUT - weather functionality disabled
-    # is_time_query,  # COMMENTED OUT - time functionality disabled
-    # extract_location_from_query,  # COMMENTED OUT - weather functionality disabled
     ServiceError,
     STTError,
     LLMError,
@@ -26,10 +23,6 @@ from services import (
 )
 from content_safety import check_content_safety, get_supportive_response, HarmCategory
 from persona_store import persona_store
-# COMMENTED OUT - weather functionality disabled
-# from weather_service import get_weather, geocode_location, format_weather_response, detect_persona_style
-# COMMENTED OUT - time functionality disabled
-# from time_utils import get_current_datetime, get_time_of_day, get_greeting, format_datetime_response, get_first_interaction_greeting
 from models import Persona
 
 # Configure logging
@@ -260,130 +253,6 @@ async def quote_endpoint():
     except Exception as e:
         logger.error(f"Error fetching quote: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get quote.")
-
-
-@app.get("/weather")
-async def weather_endpoint(
-    location_query: Optional[str] = None,
-    latitude: Optional[float] = None,
-    longitude: Optional[float] = None
-):
-    """
-    Get current weather information.
-    
-    - If location_query provided: geocodes to lat/lng using Nominatim
-    - If lat/lng provided directly: uses those coordinates
-    - Returns weather data with formatted response
-    """
-    try:
-        location_name = None
-        
-        # Determine coordinates
-        if location_query:
-            geo_result = geocode_location(location_query)
-            if geo_result:
-                latitude, longitude, location_name = geo_result
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Could not find location: {location_query}"
-                )
-        
-        if latitude is None or longitude is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Either location_query or latitude/longitude required"
-            )
-        
-        # Fetch weather data
-        weather_data = await get_weather(latitude, longitude)
-        
-        if not weather_data.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=weather_data.get("error", "Weather service unavailable")
-            )
-        
-        # Use default companion style for formatted response
-        persona_style = "warm"
-        
-        formatted_response = format_weather_response(weather_data, location_name, persona_style)
-        
-        return {
-            **weather_data,
-            "location_name": location_name,
-            "formatted_response": formatted_response
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching weather: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to get weather data."
-        )
-
-
-@app.get("/datetime")
-async def datetime_endpoint(
-    timezone: str = "Asia/Kolkata"
-):
-    """
-    Get current date, time, and time-of-day information.
-    """
-    try:
-        datetime_info = get_current_datetime(timezone)
-        time_of_day = get_time_of_day(datetime_info["hour"])
-        
-        # Use default companion style for formatted response
-        persona_style = "warm"
-        
-        formatted_response = format_datetime_response(datetime_info, time_of_day, persona_style)
-        
-        return {
-            **datetime_info,
-            "time_of_day": time_of_day,
-            "formatted_response": formatted_response
-        }
-    except Exception as e:
-        logger.error(f"Error getting datetime: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to get date/time."
-        )
-
-
-@app.get("/greeting")
-async def greeting_endpoint(
-    timezone: str = "Asia/Kolkata"
-):
-    """
-    Get a time-appropriate greeting.
-    Useful for first-interaction greetings.
-    """
-    try:
-        datetime_info = get_current_datetime(timezone)
-        time_of_day = get_time_of_day(datetime_info["hour"])
-        
-        # Use default companion style
-        persona_style = "warm"
-        persona_name = "AI Companion"
-        
-        greeting = get_greeting(time_of_day, persona_style)
-        
-        return {
-            "greeting": greeting,
-            "time_of_day": time_of_day,
-            "persona_name": persona_name,
-            "persona_style": persona_style,
-            "current_time": datetime_info["time"]
-        }
-    except Exception as e:
-        logger.error(f"Error getting greeting: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate greeting."
-        )
 
 
 if __name__ == "__main__":

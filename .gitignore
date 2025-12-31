@@ -55,3 +55,6 @@ tmp/
 *.json
 !package.json
 !package-lock.json
+
+# Mobile app (excluded from version control)
+mobile/
