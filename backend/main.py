@@ -14,9 +14,9 @@ from services import (
     compute_voice_settings,
     get_joke,
     get_quote,
-    is_weather_query,
-    is_time_query,
-    extract_location_from_query,
+    # is_weather_query,  # COMMENTED OUT - weather functionality disabled
+    # is_time_query,  # COMMENTED OUT - time functionality disabled
+    # extract_location_from_query,  # COMMENTED OUT - weather functionality disabled
     ServiceError,
     STTError,
     LLMError,
@@ -26,8 +26,10 @@ from services import (
 )
 from content_safety import check_content_safety, get_supportive_response, HarmCategory
 from persona_store import persona_store
-from weather_service import get_weather, geocode_location, format_weather_response, detect_persona_style
-from time_utils import get_current_datetime, get_time_of_day, get_greeting, format_datetime_response, get_first_interaction_greeting
+# COMMENTED OUT - weather functionality disabled
+# from weather_service import get_weather, geocode_location, format_weather_response, detect_persona_style
+# COMMENTED OUT - time functionality disabled
+# from time_utils import get_current_datetime, get_time_of_day, get_greeting, format_datetime_response, get_first_interaction_greeting
 from models import Persona
 
 # Configure logging
@@ -50,35 +52,6 @@ app.add_middleware(
 
 
 # Pydantic Models
-class PersonaCreate(BaseModel):
-    name: str
-    base_prompt: str
-    voice_id: Optional[str] = None
-    base_stability: Optional[float] = 0.5
-    base_similarity_boost: Optional[float] = 0.75
-    base_style: Optional[float] = 0.0
-
-
-class PersonaUpdate(BaseModel):
-    name: Optional[str] = None
-    base_prompt: Optional[str] = None
-    voice_id: Optional[str] = None
-    base_stability: Optional[float] = None
-    base_similarity_boost: Optional[float] = None
-    base_style: Optional[float] = None
-
-
-class PersonaResponse(BaseModel):
-    id: str
-    name: str
-    base_prompt: str
-    voice_id: str
-    base_stability: float
-    base_similarity_boost: float
-    base_style: float
-    is_default: bool
-
-
 class ChatResponse(BaseModel):
     audio_base64: str
     transcript: str
@@ -95,62 +68,11 @@ async def health_check():
     return {"status": "healthy", "version": "2.0"}
 
 
-# ==================== PERSONA ENDPOINTS ====================
-
-@app.get("/personas", response_model=list[PersonaResponse])
-async def list_personas():
-    """Get all available personas."""
-    personas = persona_store.get_all()
-    return [PersonaResponse(**p.to_dict()) for p in personas]
-
-
-@app.get("/personas/{persona_id}", response_model=PersonaResponse)
-async def get_persona(persona_id: str):
-    """Get a specific persona by ID."""
-    persona = persona_store.get(persona_id)
-    if not persona:
-        raise HTTPException(status_code=404, detail="Persona not found")
-    return PersonaResponse(**persona.to_dict())
-
-
-@app.post("/personas", response_model=PersonaResponse, status_code=201)
-async def create_persona(persona_data: PersonaCreate):
-    """Create a new persona."""
-    persona = persona_store.create(
-        name=persona_data.name,
-        base_prompt=persona_data.base_prompt,
-        voice_id=persona_data.voice_id,
-        base_stability=persona_data.base_stability or 0.5,
-        base_similarity_boost=persona_data.base_similarity_boost or 0.75,
-        base_style=persona_data.base_style or 0.0
-    )
-    return PersonaResponse(**persona.to_dict())
-
-
-@app.put("/personas/{persona_id}", response_model=PersonaResponse)
-async def update_persona(persona_id: str, persona_data: PersonaUpdate):
-    """Update an existing persona."""
-    update_fields = {k: v for k, v in persona_data.model_dump().items() if v is not None}
-    persona = persona_store.update(persona_id, **update_fields)
-    if not persona:
-        raise HTTPException(status_code=404, detail="Persona not found")
-    return PersonaResponse(**persona.to_dict())
-
-
-@app.delete("/personas/{persona_id}")
-async def delete_persona(persona_id: str):
-    """Delete a persona. All personas can be deleted."""
-    if persona_store.delete(persona_id):
-        return {"message": "Persona deleted successfully"}
-    raise HTTPException(status_code=404, detail="Persona not found")
-
-
 # ==================== CHAT ENDPOINT ====================
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(
     file: UploadFile = File(...),
-    persona_id: Optional[str] = Form(default=None),
     user_latitude: Optional[float] = Form(default=None),
     user_longitude: Optional[float] = Form(default=None),
     is_first_message: Optional[bool] = Form(default=False)
@@ -161,7 +83,7 @@ async def chat_endpoint(
     Pipeline:
     1. Transcribe audio (STT)
     2. Analyze intent and tone
-    3. Generate response using persona context (with weather/time data if queried)
+    3. Generate response using customResponses.txt tone matching (with weather/time data if queried)
     4. Synthesize speech with dynamic voice settings (TTS)
     
     Optional: user_latitude and user_longitude for weather queries without specific location.
@@ -169,18 +91,13 @@ async def chat_endpoint(
     Returns JSON with audio (base64), transcript, analysis, and response text.
     """
     try:
-        logger.info(f"Received audio file: {file.filename}, persona_id: {persona_id}, coords: ({user_latitude}, {user_longitude})")
+        logger.info(f"Received audio file: {file.filename}, coords: ({user_latitude}, {user_longitude})")
         audio_content = await file.read()
         
-        # Get persona (default if not specified)
-        if persona_id:
-            persona = persona_store.get(persona_id)
-            if not persona:
-                persona = persona_store.get_default()
-        else:
-            persona = persona_store.get_default()
+        # Get default persona
+        persona = persona_store.get_default()
         
-        logger.info(f"Using persona: {persona.name}")
+        logger.info(f"Using AI Companion")
         
         # 1. Transcribe
         transcript = await transcribe_audio(audio_content)
@@ -233,57 +150,57 @@ async def chat_endpoint(
         analysis = await analyze_intent_and_tone(transcript)
         logger.info(f"Analysis - Intent: {analysis.intent}, Tone: {analysis.tone}")
         
-        # 3.5. Prepare weather/time data ONLY if relevant query detected
-        weather_data = None
-        time_data = None
+        # COMMENTED OUT: Weather and time data preparation
+        # weather_data = None
+        # time_data = None
+        # 
+        # # Check for weather query and fetch data if needed
+        # if is_weather_query(transcript):
+        #     logger.info("Weather query detected, extracting location...")
+        #     location = await extract_location_from_query(transcript)
+        #     
+        #     if location:
+        #         logger.info(f"Location extracted: {location}")
+        #         geo_result = geocode_location(location)
+        #         if geo_result:
+        #             lat, lng, location_name = geo_result
+        #             weather_data = await get_weather(lat, lng)
+        #             weather_data["location_name"] = location_name or location
+        #             logger.info(f"Weather data fetched for {location_name}")
+        #         else:
+        #             logger.warning(f"Could not geocode location: {location}")
+        #     elif user_latitude is not None and user_longitude is not None:
+        #         # No specific location mentioned BUT user coords available - use them
+        #         logger.info(f"No location specified, using user coordinates: ({user_latitude}, {user_longitude})")
+        #         weather_data = await get_weather(user_latitude, user_longitude)
+        #         weather_data["location_name"] = "your location"
+        #         logger.info(f"Weather data fetched for user's location")
+        #     else:
+        #         # No specific location mentioned AND no user coords - ask for location
+        #         logger.info("No location specified and no user coordinates available")
+        # 
+        # # Check for time/date query and get time data if needed
+        # if is_time_query(transcript):
+        #     logger.info("Time/date query detected, fetching current time...")
+        #     time_data = get_current_datetime("Asia/Kolkata")
+        #     time_data["time_of_day"] = get_time_of_day(time_data["hour"])
         
-        # Check for weather query and fetch data if needed
-        if is_weather_query(transcript):
-            logger.info("Weather query detected, extracting location...")
-            location = await extract_location_from_query(transcript)
-            
-            if location:
-                logger.info(f"Location extracted: {location}")
-                geo_result = geocode_location(location)
-                if geo_result:
-                    lat, lng, location_name = geo_result
-                    weather_data = await get_weather(lat, lng)
-                    weather_data["location_name"] = location_name or location
-                    logger.info(f"Weather data fetched for {location_name}")
-                else:
-                    logger.warning(f"Could not geocode location: {location}")
-            elif user_latitude is not None and user_longitude is not None:
-                # No specific location mentioned BUT user coords available - use them
-                logger.info(f"No location specified, using user coordinates: ({user_latitude}, {user_longitude})")
-                weather_data = await get_weather(user_latitude, user_longitude)
-                weather_data["location_name"] = "your location"
-                logger.info(f"Weather data fetched for user's location")
-            else:
-                # No specific location mentioned AND no user coords - ask for location
-                logger.info("No location specified and no user coordinates available")
+        # COMMENTED OUT: Time of day greeting
+        # current_time_of_day = None
+        # if is_first_message:
+        #     dt_info = get_current_datetime("Asia/Kolkata")
+        #     current_time_of_day = get_time_of_day(dt_info["hour"])
+        #     logger.info(f"First message - will greet with time of day: {current_time_of_day}")
         
-        # Check for time/date query and get time data if needed
-        if is_time_query(transcript):
-            logger.info("Time/date query detected, fetching current time...")
-            time_data = get_current_datetime("Asia/Kolkata")
-            time_data["time_of_day"] = get_time_of_day(time_data["hour"])
-        
-        # Get time of day for greeting on first message
-        current_time_of_day = None
-        if is_first_message:
-            dt_info = get_current_datetime("Asia/Kolkata")
-            current_time_of_day = get_time_of_day(dt_info["hour"])
-            logger.info(f"First message - will greet with time of day: {current_time_of_day}")
-        
-        # 4. Generate Response (LLM) with weather/time context ONLY when relevant
+        # 4. Generate Response - LLM selects phrase from customResponses.txt
         ai_text = await generate_response(
             transcript, 
             persona, 
             analysis,
-            weather_data=weather_data,
-            time_data=time_data,
+            weather_data=None,
+            time_data=None,
             is_first_interaction=is_first_message,
-            time_of_day=current_time_of_day
+            time_of_day=None
         )
         logger.info(f"AI Response: {ai_text}")
         
@@ -349,15 +266,14 @@ async def quote_endpoint():
 async def weather_endpoint(
     location_query: Optional[str] = None,
     latitude: Optional[float] = None,
-    longitude: Optional[float] = None,
-    persona_id: Optional[str] = None
+    longitude: Optional[float] = None
 ):
     """
     Get current weather information.
     
     - If location_query provided: geocodes to lat/lng using Nominatim
     - If lat/lng provided directly: uses those coordinates
-    - Returns weather data with optional persona-styled response
+    - Returns weather data with formatted response
     """
     try:
         location_name = None
@@ -388,12 +304,8 @@ async def weather_endpoint(
                 detail=weather_data.get("error", "Weather service unavailable")
             )
         
-        # Get persona style for formatted response
-        persona_style = "cheerful"
-        if persona_id:
-            persona = persona_store.get(persona_id)
-            if persona:
-                persona_style = detect_persona_style(persona.base_prompt)
+        # Use default companion style for formatted response
+        persona_style = "warm"
         
         formatted_response = format_weather_response(weather_data, location_name, persona_style)
         
@@ -414,8 +326,7 @@ async def weather_endpoint(
 
 @app.get("/datetime")
 async def datetime_endpoint(
-    timezone: str = "Asia/Kolkata",
-    persona_id: Optional[str] = None
+    timezone: str = "Asia/Kolkata"
 ):
     """
     Get current date, time, and time-of-day information.
@@ -424,12 +335,8 @@ async def datetime_endpoint(
         datetime_info = get_current_datetime(timezone)
         time_of_day = get_time_of_day(datetime_info["hour"])
         
-        # Get persona style for formatted response
-        persona_style = "cheerful"
-        if persona_id:
-            persona = persona_store.get(persona_id)
-            if persona:
-                persona_style = detect_persona_style(persona.base_prompt)
+        # Use default companion style for formatted response
+        persona_style = "warm"
         
         formatted_response = format_datetime_response(datetime_info, time_of_day, persona_style)
         
@@ -448,25 +355,19 @@ async def datetime_endpoint(
 
 @app.get("/greeting")
 async def greeting_endpoint(
-    persona_id: Optional[str] = None,
     timezone: str = "Asia/Kolkata"
 ):
     """
-    Get a time-appropriate greeting based on persona.
+    Get a time-appropriate greeting.
     Useful for first-interaction greetings.
     """
     try:
         datetime_info = get_current_datetime(timezone)
         time_of_day = get_time_of_day(datetime_info["hour"])
         
-        # Get persona style
-        persona_style = "cheerful"
+        # Use default companion style
+        persona_style = "warm"
         persona_name = "AI Companion"
-        if persona_id:
-            persona = persona_store.get(persona_id)
-            if persona:
-                persona_style = detect_persona_style(persona.base_prompt)
-                persona_name = persona.name
         
         greeting = get_greeting(time_of_day, persona_style)
         

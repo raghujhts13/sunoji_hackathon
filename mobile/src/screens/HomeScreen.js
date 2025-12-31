@@ -312,8 +312,6 @@ const HomeScreen = () => {
 
     // Resume listening after response
     const resumeListening = async () => {
-        if (sessionStateRef.current === SESSION_STATE.IDLE) return;
-
         console.log('Resuming listening...');
         isProcessingRef.current = false;
         resetSpeechState();

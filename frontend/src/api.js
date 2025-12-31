@@ -9,14 +9,10 @@ const api = axios.create({
 
 // ==================== CHAT ====================
 
-export const sendAudio = async (audioBlob, personaId = null, userLatitude = null, userLongitude = null, isFirstMessage = false) => {
+export const sendAudio = async (audioBlob, userLatitude = null, userLongitude = null, isFirstMessage = false) => {
     try {
         const formData = new FormData();
         formData.append('file', audioBlob, 'recording.webm');
-
-        if (personaId) {
-            formData.append('persona_id', personaId);
-        }
 
         if (userLatitude !== null && userLongitude !== null) {
             formData.append('user_latitude', userLatitude);
@@ -37,58 +33,6 @@ export const sendAudio = async (audioBlob, personaId = null, userLatitude = null
         return response.data;
     } catch (error) {
         console.error('Error sending audio:', error);
-        throw error;
-    }
-};
-
-// ==================== PERSONAS ====================
-
-export const getPersonas = async () => {
-    try {
-        const response = await api.get('/personas');
-        return response.data;
-    } catch (error) {
-        console.error('Error getting personas:', error);
-        throw error;
-    }
-};
-
-export const getPersona = async (id) => {
-    try {
-        const response = await api.get(`/personas/${id}`);
-        return response.data;
-    } catch (error) {
-        console.error('Error getting persona:', error);
-        throw error;
-    }
-};
-
-export const createPersona = async (personaData) => {
-    try {
-        const response = await api.post('/personas', personaData);
-        return response.data;
-    } catch (error) {
-        console.error('Error creating persona:', error);
-        throw error;
-    }
-};
-
-export const updatePersona = async (id, personaData) => {
-    try {
-        const response = await api.put(`/personas/${id}`, personaData);
-        return response.data;
-    } catch (error) {
-        console.error('Error updating persona:', error);
-        throw error;
-    }
-};
-
-export const deletePersona = async (id) => {
-    try {
-        const response = await api.delete(`/personas/${id}`);
-        return response.data;
-    } catch (error) {
-        console.error('Error deleting persona:', error);
         throw error;
     }
 };
@@ -117,13 +61,12 @@ export const getQuote = async () => {
 
 // ==================== WEATHER & TIME ====================
 
-export const getWeather = async (locationQuery = null, latitude = null, longitude = null, personaId = null) => {
+export const getWeather = async (locationQuery = null, latitude = null, longitude = null) => {
     try {
         const params = {};
         if (locationQuery) params.location_query = locationQuery;
         if (latitude !== null) params.latitude = latitude;
         if (longitude !== null) params.longitude = longitude;
-        if (personaId) params.persona_id = personaId;
 
         const response = await api.get('/weather', { params });
         return response.data;
@@ -133,10 +76,9 @@ export const getWeather = async (locationQuery = null, latitude = null, longitud
     }
 };
 
-export const getDateTime = async (timezone = 'Asia/Kolkata', personaId = null) => {
+export const getDateTime = async (timezone = 'Asia/Kolkata') => {
     try {
         const params = { timezone };
-        if (personaId) params.persona_id = personaId;
 
         const response = await api.get('/datetime', { params });
         return response.data;
@@ -146,10 +88,9 @@ export const getDateTime = async (timezone = 'Asia/Kolkata', personaId = null) =
     }
 };
 
-export const getGreeting = async (personaId = null, timezone = 'Asia/Kolkata') => {
+export const getGreeting = async (timezone = 'Asia/Kolkata') => {
     try {
         const params = { timezone };
-        if (personaId) params.persona_id = personaId;
 
         const response = await api.get('/greeting', { params });
         return response.data;

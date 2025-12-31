@@ -19,6 +19,7 @@ from elevenlabs.client import ElevenLabs
 
 from models import Persona, IntentToneAnalysis, VALID_INTENTS, VALID_TONES
 from persona_store import persona_store
+from custom_responses import custom_response_selector
 
 # Initialize Clients
 speech_client = speech.SpeechClient()
@@ -231,24 +232,42 @@ async def analyze_intent_and_tone(transcript: str) -> IntentToneAnalysis:
                 confidence=0.0
             )
         
-        analysis_prompt = f"""Analyze the following user speech and return a JSON object with intent and tone.
+        analysis_prompt = f"""Analyze the user's message using Natural Language Understanding to determine their TRUE intent and emotional tone based on semantic meaning, not just keywords.
 
 User said: "{transcript}"
 
+SEMANTIC ANALYSIS GUIDELINES:
+- "I want X" / "Looking forward to X" / "Can't wait for X" → excited/happy (anticipation, desire)
+- "I don't want X" / "I hate X" / "This sucks" → frustrated/sad (complaints, negativity)
+- Mentioning events/competitions/plans → excited (unless explicitly negative)
+- Sharing achievements/news → happy/excited
+- Complaining/problems → frustrated/sad
+- Questions about self → seeking_advice or anxious
+- Factual questions → question intent, neutral tone
+
+EXAMPLES:
+- "I want the competition today" → excited, casual_chat (anticipation of event)
+- "Hey, competition today" → excited, casual_chat (sharing exciting news)
+- "I can't handle this competition" → anxious/frustrated, venting (stress)
+- "Competition got cancelled" → sad/frustrated, venting (disappointment)
+- "What's the weather like?" → neutral, question (factual query)
+
 Classify:
 1. intent: One of [venting, seeking_advice, casual_chat, question]
-   - venting: expressing frustration, complaints, or emotional release
-   - seeking_advice: asking for guidance or help with a decision
-   - casual_chat: general conversation, small talk, or greetings
+   - venting: expressing frustration, complaints, negative emotions
+   - seeking_advice: asking for guidance or help with decisions
+   - casual_chat: sharing news, updates, greetings, positive statements
    - question: asking for information or facts
 
 2. tone: One of [happy, sad, frustrated, neutral, anxious, excited]
-   - happy: positive, joyful, content
+   - happy: positive, joyful, content, satisfied
    - sad: melancholic, disappointed, down
-   - frustrated: annoyed, irritated, exasperated
-   - neutral: calm, matter-of-fact, unemotional
-   - anxious: worried, nervous, uncertain
-   - excited: enthusiastic, eager, energized
+   - frustrated: annoyed, irritated, complaining
+   - neutral: calm, matter-of-fact, informational
+   - anxious: worried, nervous, uncertain, stressed
+   - excited: enthusiastic, eager, anticipating, energized
+
+IMPORTANT: Focus on the SEMANTIC MEANING and CONTEXT, not surface keywords.
 
 Respond ONLY with a JSON object like:
 {{"intent": "...", "tone": "...", "confidence": 0.0-1.0}}"""
@@ -376,25 +395,17 @@ Location:"""
         return None
 
 
-def is_weather_query(transcript: str) -> bool:
-    """Check if the transcript is asking about weather."""
-    weather_keywords = [
-        "weather", "temperature", "forecast", "rain", "sunny", "cloudy",
-        "hot", "cold", "humid", "humidity", "wind", "storm", "snow",
-        "climate", "degrees", "celsius", "fahrenheit"
-    ]
-    transcript_lower = transcript.lower()
-    return any(keyword in transcript_lower for keyword in weather_keywords)
+# COMMENTED OUT: Weather query detection
+# def is_weather_query(transcript: str) -> bool:
+#     """Check if transcript is asking about weather."""
+#     weather_keywords = ["weather", "temperature", "hot", "cold", "rain", "sunny", "forecast"]
+#     return any(keyword in transcript.lower() for keyword in weather_keywords)
 
-
-def is_time_query(transcript: str) -> bool:
-    """Check if the transcript is asking about time or date."""
-    time_keywords = [
-        "time", "date", "day", "today", "what day", "what time",
-        "current time", "current date", "clock", "hour", "o'clock"
-    ]
-    transcript_lower = transcript.lower()
-    return any(keyword in transcript_lower for keyword in time_keywords)
+# COMMENTED OUT: Time query detection
+# def is_time_query(transcript: str) -> bool:
+#     """Check if transcript is asking about time or date."""
+#     time_keywords = ["time", "date", "what day", "clock", "hour", "minute", "today", "day is it"]
+#     return any(keyword in transcript.lower() for keyword in time_keywords)
 
 
 async def generate_response(
@@ -407,96 +418,173 @@ async def generate_response(
     time_of_day: Optional[str] = None
 ) -> str:
     """
-    Generates a response using Vertex AI with persona and analysis context.
-    Enhanced to handle weather queries and time queries.
-    Adds simple time-based greeting (Good morning/afternoon/evening/night) on first interaction.
+    Uses LLM as a router to select the most appropriate response phrase from customResponses.txt.
+    Returns only the selected phrase to be voiced via ElevenLabs.
     """
     try:
         if not model:
             raise LLMError("Vertex AI model not initialized. Check GCP_PROJECT_ID.")
 
-        # Build context-aware system prompt
-        context_hints = []
+        # Get all available phrases from custom_response_selector
+        available_phrases = []
+        for category, phrases in custom_response_selector.phrases.items():
+            available_phrases.extend(phrases)
         
-        # First interaction - add simple greeting instruction  
-        if is_first_interaction and time_of_day:
-            greeting_map = {
-                "morning": "Good morning",
-                "afternoon": "Good afternoon",
-                "evening": "Good evening",
-                "night": "Good night"
-            }
-            greeting = greeting_map.get(time_of_day, "Hello")
-            context_hints.append(f"This is the first interaction. Start your response with '{greeting}' (just those two words), then naturally respond to their query.")
-        
-        # Intent-based context
-        if analysis.intent == "venting":
-            context_hints.append("The user is venting and needs to feel heard. Validate their feelings.")
-        elif analysis.intent == "seeking_advice":
-            context_hints.append("The user is seeking advice. Offer thoughtful guidance.")
-        elif analysis.intent == "question":
-            context_hints.append("The user asked a question. Provide a helpful answer.")
-        
-        # Tone-based context
-        if analysis.tone in ["sad", "anxious"]:
-            context_hints.append("The user seems emotionally vulnerable. Be extra gentle and supportive.")
-        elif analysis.tone in ["happy", "excited"]:
-            context_hints.append("The user is in a positive mood. Match their energy!")
-        elif analysis.tone == "frustrated":
-            context_hints.append("The user seems frustrated. Acknowledge their frustration and be patient.")
-        
-        context_section = "\n".join(context_hints) if context_hints else ""
-        
-        # Special handling for weather queries
-        if is_weather_query(transcript):
-            if weather_data and weather_data.get("success"):
-                # We have weather data - provide it
-                temp = weather_data.get("temperature")
-                feels_like = weather_data.get("apparent_temperature")
-                conditions = weather_data.get("conditions")
-                location = weather_data.get("location_name", "your location")
-                humidity = weather_data.get("humidity")
-                wind = weather_data.get("wind_speed")
-                
-                weather_context = f"""The user is asking about weather. Here's the current data for {location}:
-- Temperature: {temp}°C (feels like {feels_like}°C)
-- Conditions: {conditions}
-- Humidity: {humidity}%
-- Wind speed: {wind} km/h
+        # Build a prompt for LLM to select the best phrase
+        selection_prompt = f"""You are an empathetic response selector for a warm AI companion. Select the MOST APPROPRIATE acknowledgment phrase that matches the user's energy and context.
 
-Provide this weather information in your personality style, keeping it natural and conversational."""
-                context_section = f"{context_section}\n\n{weather_context}" if context_section else weather_context
-            else:
-                # Weather query but no data available - ask for location
-                weather_context = """The user is asking about weather, but no location was specified or found. 
-Politely ask them which location/city they'd like to know the weather for."""
-                context_section = f"{context_section}\n\n{weather_context}" if context_section else weather_context
-        
-        # Special handling for time queries
-        if is_time_query(transcript) and time_data:
-            time_context = f"""The user is asking about the time/date. Current information:
-- Time: {time_data.get("time", "N/A")}
-- Date: {time_data.get("date", "N/A")}
-- Day: {time_data.get("day_of_week", "N/A")}
+User's message: "{transcript}"
+Detected tone: {analysis.tone}
+Detected intent: {analysis.intent}
 
-Provide this time information in your personality style, keeping it natural and conversational."""
-            context_section = f"{context_section}\n\n{time_context}" if context_section else time_context
-        
-        full_prompt = f"""{persona.base_prompt}
+CONTEXT GUIDELINES:
+- Competitions, events, achievements, plans → Use excited/positive phrases (e.g., "Really?", "How exciting", "That's great")
+- Sharing news or updates → Use engaged phrases (e.g., "Oh wow", "Tell me more", "That's wonderful")
+- Venting or problems → Use validating phrases (e.g., "I hear you", "That sounds tough")
+- Thinking/processing → Use patient phrases (e.g., "Take your time", "I'm listening")
+- Simple greetings → Use warm acknowledgments (e.g., "I'm here", "Go on")
 
-{context_section}
+IMPORTANT: Match the user's implicit energy level, not just the detected tone. Be warm and engaged.
 
-Keep your response concise and conversational (1-3 sentences).
+Available phrases:
+{chr(10).join(f"{i+1}. {phrase}" for i, phrase in enumerate(available_phrases))}
 
-User: {transcript}
-Assistant:"""
+Select ONE phrase that feels natural and matches their energy. Respond with ONLY the exact phrase text, nothing else.
+
+Selected phrase:"""
         
         chat = model.start_chat()
-        response = chat.send_message(full_prompt)
+        response = chat.send_message(selection_prompt)
         
-        return response.text.strip()
+        selected_phrase = response.text.strip()
+        
+        # Fallback: if LLM returns something not in our list, use custom_response_selector logic
+        if selected_phrase not in available_phrases:
+            logger.warning(f"LLM returned phrase not in list: '{selected_phrase}'. Using fallback.")
+            selected_phrase = custom_response_selector.select_phrase(analysis.tone, analysis.intent)
+        
+        logger.info(f"Selected phrase for tone={analysis.tone}, intent={analysis.intent}: '{selected_phrase}'")
+        return selected_phrase
+        
     except Exception as e:
-        raise LLMError(f"Failed to generate response: {str(e)}")
+        # Fallback to custom_response_selector on any error
+        logger.error(f"Error in LLM-based phrase selection: {str(e)}. Using fallback.")
+        return custom_response_selector.select_phrase(analysis.tone, analysis.intent)
+
+
+# COMMENTED OUT: Original full response generation function
+# async def generate_response_ORIGINAL(
+#     transcript: str,
+#     persona: Persona,
+#     analysis: IntentToneAnalysis,
+#     weather_data:Optional[dict] = None,
+#     time_data: Optional[dict] = None,
+#     is_first_interaction: bool = False,
+#     time_of_day: Optional[str] = None
+# ) -> str:
+#     """
+#     Generates a response using Vertex AI with persona and analysis context.
+#     Enhanced to handle weather queries and time queries.
+#     Adds simple time-based greeting (Good morning/afternoon/evening/night) on first interaction.
+#     """
+#     try:
+#         if not model:
+#             raise LLMError("Vertex AI model not initialized. Check GCP_PROJECT_ID.")
+#
+#         # Build context-aware system prompt
+#         context_hints = []
+#         
+#         # First interaction - add simple greeting instruction  
+#         if is_first_interaction and time_of_day:
+#             greeting_map = {
+#                 "morning": "Good morning",
+#                 "afternoon": "Good afternoon",
+#                 "evening": "Good evening",
+#                 "night": "Good night"
+#             }
+#             greeting = greeting_map.get(time_of_day, "Hello")
+#             context_hints.append(f"This is the first interaction. Start your response with '{greeting}' (just those two words), then naturally respond to their query.")
+#         
+#         # Intent-based context
+#         if analysis.intent == "venting":
+#             context_hints.append("The user is venting and needs to feel heard. Validate their feelings.")
+#         elif analysis.intent == "seeking_advice":
+#             context_hints.append("The user is seeking advice. Offer thoughtful guidance.")
+#         elif analysis.intent == "question":
+#             context_hints.append("The user asked a question. Provide a helpful answer.")
+#         
+#         # Tone-based context
+#         if analysis.tone in ["sad", "anxious"]:
+#             context_hints.append("The user seems emotionally vulnerable. Be extra gentle and supportive.")
+#         elif analysis.tone in ["happy", "excited"]:
+#             context_hints.append("The user is in a positive mood. Match their energy!")
+#         elif analysis.tone == "frustrated":
+#             context_hints.append("The user seems frustrated. Acknowledge their frustration and be patient.")
+#         
+#         context_section = "\n".join(context_hints) if context_hints else ""
+#         
+#         # Special handling for weather queries
+#         if is_weather_query(transcript):
+#             if weather_data and weather_data.get("success"):
+#                 # We have weather data - provide it
+#                 temp = weather_data.get("temperature")
+#                 feels_like = weather_data.get("apparent_temperature")
+#                 conditions = weather_data.get("conditions")
+#                 location = weather_data.get("location_name", "your location")
+#                 humidity = weather_data.get("humidity")
+#                 wind = weather_data.get("wind_speed")
+#                 
+#                 weather_context = f"""The user is asking about weather. Here's the current data for {location}:
+# - Temperature: {temp}°C (feels like {feels_like}°C)
+# - Conditions: {conditions}
+# - Humidity: {humidity}%
+# - Wind speed: {wind} km/h
+#
+# Provide this weather information in your personality style, keeping it natural and conversational."""
+#                 context_section = f"{context_section}\n\n{weather_context}" if context_section else weather_context
+#             else:
+#                 # Weather query but no data available - ask for location
+#                 weather_context = """The user is asking about weather, but no location was specified or found. 
+# Politely ask them which location/city they'd like to know the weather for."""
+#                 context_section = f"{context_section}\n\n{weather_context}" if context_section else weather_context
+#         
+#         # Special handling for time queries
+#         if is_time_query(transcript) and time_data:
+#             time_context = f"""The user is asking about the time/date. Current information:
+# - Time: {time_data.get("time", "N/A")}
+# - Date: {time_data.get("date", "N/A")}
+# - Day: {time_data.get("day_of_week", "N/A")}
+#
+# Provide this time information in your personality style, keeping it natural and conversational."""
+#             context_section = f"{context_section}\n\n{time_context}" if context_section else time_context
+#         
+#         full_prompt = f"""{persona.base_prompt}
+#
+# {context_section}
+#
+# Keep your response concise and conversational (1-3 sentences).
+#
+# User: {transcript}
+# Assistant:"""
+#         
+#         chat = model.start_chat()
+#         response = chat.send_message(full_prompt)
+#         
+#         ai_response = response.text.strip()
+#         
+#         # Select appropriate custom phrase based on tone and intent
+#         custom_phrase = custom_response_selector.select_phrase(analysis.tone, analysis.intent)
+#         
+#         # Prepend the custom phrase to the response (except for first interaction with greeting)
+#         if is_first_interaction and time_of_day:
+#             # For first interaction, the greeting is already in the response, just add phrase after greeting
+#             # The AI already starts with "Good morning/afternoon/etc"
+#             return ai_response
+#         else:
+#             # For subsequent interactions, prepend the custom phrase
+#             return f"{custom_phrase}. {ai_response}"
+#     except Exception as e:
+#         raise LLMError(f"Failed to generate response: {str(e)}")
 
 
 async def synthesize_speech(

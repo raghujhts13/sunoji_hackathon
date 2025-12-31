@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { sendAudio, getJoke, getQuote, getPersonas, createPersona, updatePersona, deletePersona, base64ToAudioBlob, getWeather, getDateTime } from './api'
+import { sendAudio, getJoke, getQuote, base64ToAudioBlob, getWeather, getDateTime } from './api'
 import { useVoiceActivityDetection } from './hooks/useVoiceActivityDetection'
 import './App.css'
 
@@ -25,18 +25,8 @@ function App() {
   const isProcessingRef = useRef(false)
   const turnCountRef = useRef(0)
   const recordingStartTimeRef = useRef(null)
-
-  // Persona state
-  const [personas, setPersonas] = useState([])
-  const [selectedPersonaId, setSelectedPersonaId] = useState(null)
-  const [showPersonaModal, setShowPersonaModal] = useState(false)
-  const [newPersonaName, setNewPersonaName] = useState('')
-  const [newPersonaPrompt, setNewPersonaPrompt] = useState('')
-
-  // Edit persona state
-  const [editingPersonaId, setEditingPersonaId] = useState(null)
-  const [editPersonaName, setEditPersonaName] = useState('')
-  const [editPersonaPrompt, setEditPersonaPrompt] = useState('')
+  const currentAudioRef = useRef(null)
+  const audioTimeoutRef = useRef(null)
 
   // Analysis state
   const [lastAnalysis, setLastAnalysis] = useState(null)
@@ -48,9 +38,8 @@ function App() {
   const [userLocation, setUserLocation] = useState({ latitude: null, longitude: null })
   const [locationPermissionDenied, setLocationPermissionDenied] = useState(false)
 
-  // Load personas on mount
+  // Get user location on mount
   useEffect(() => {
-    loadPersonas()
     getUserLocation()
   }, [])
 
@@ -92,22 +81,6 @@ function App() {
     }
   }
 
-  // Load personas from API
-  const loadPersonas = async () => {
-    try {
-      const data = await getPersonas()
-      setPersonas(data)
-      // Select default persona if none selected
-      if (!selectedPersonaId && data.length > 0) {
-        const defaultPersona = data.find(p => p.is_default) || data[0]
-        setSelectedPersonaId(defaultPersona.id)
-      }
-    } catch (error) {
-      console.error('Failed to load personas:', error)
-    }
-  }
-
-
   // Ref to track current session state (avoids stale closure in callbacks)
   const sessionStateRef = useRef(sessionState)
   useEffect(() => {
@@ -116,30 +89,98 @@ function App() {
 
   // Callback when speech starts (VAD detects voice)
   const handleSpeechStart = useCallback(() => {
-    console.log('Speech detected, state:', sessionStateRef.current, 'processing:', isProcessingRef.current)
-    if (sessionStateRef.current === SESSION_STATE.LISTENING && !isProcessingRef.current) {
-      console.log('Starting recording...')
-      audioChunksRef.current = []
-      setStatus('🎤 Listening... Speak now')
-
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'inactive') {
-        mediaRecorderRef.current.start()
-        console.log('MediaRecorder started')
-      }
+    const currentState = sessionStateRef.current
+    const isProcessing = isProcessingRef.current
+    const recorderState = mediaRecorderRef.current?.state
+    
+    console.log('Speech detected, state:', currentState, 'processing:', isProcessing, 'MediaRecorder state:', recorderState)
+    
+    // Strict guard: only start recording if in LISTENING state, not processing, and recorder is ready
+    if (currentState !== SESSION_STATE.LISTENING) {
+      console.log('Skipping recording - not in LISTENING state')
+      return
+    }
+    
+    if (isProcessing) {
+      console.log('Skipping recording - already processing')
+      return
+    }
+    
+    if (!mediaRecorderRef.current) {
+      console.error('MediaRecorder is null')
+      return
+    }
+    
+    if (recorderState !== 'inactive') {
+      console.warn('MediaRecorder not ready, current state:', recorderState)
+      return
+    }
+    
+    // All conditions met - start recording
+    console.log('Starting recording...')
+    audioChunksRef.current = []
+    recordingStartTimeRef.current = Date.now()
+    setStatus('🎤 Listening... Speak now')
+    
+    try {
+      mediaRecorderRef.current.start()
+      console.log('MediaRecorder started successfully')
+    } catch (err) {
+      console.error('Failed to start MediaRecorder:', err)
     }
   }, [])
 
   // Callback when speech ends (2 seconds of silence detected)
   const handleSpeechEnd = useCallback(() => {
-    console.log('Silence detected, state:', sessionStateRef.current, 'processing:', isProcessingRef.current)
-    if (sessionStateRef.current === SESSION_STATE.LISTENING && !isProcessingRef.current) {
-      console.log('Processing speech after silence...')
-      isProcessingRef.current = true
-
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop()
-        console.log('MediaRecorder stopped')
-      }
+    const currentState = sessionStateRef.current
+    const isProcessing = isProcessingRef.current
+    const recorderState = mediaRecorderRef.current?.state
+    
+    console.log('Silence detected, state:', currentState, 'processing:', isProcessing, 'MediaRecorder state:', recorderState)
+    
+    // Strict validation: only process if in LISTENING state and recorder is actually recording
+    if (currentState !== SESSION_STATE.LISTENING) {
+      console.log('Skipping processing - not in LISTENING state')
+      return
+    }
+    
+    if (isProcessing) {
+      console.log('Skipping processing - already processing')
+      return
+    }
+    
+    if (!mediaRecorderRef.current) {
+      console.error('MediaRecorder is null')
+      return
+    }
+    
+    if (recorderState !== 'recording') {
+      console.log('Skipping processing - MediaRecorder not recording, state:', recorderState)
+      return
+    }
+    
+    // Check minimum recording duration (avoid processing very short audio)
+    const recordingDuration = Date.now() - (recordingStartTimeRef.current || 0)
+    if (recordingDuration < 400) {
+      console.log('Recording too short:', recordingDuration, 'ms - ignoring')
+      return
+    }
+    
+    // All conditions met - process the recording
+    console.log('Processing speech after silence... (duration:', recordingDuration, 'ms)')
+    
+    // Set processing flag BEFORE stopping recorder to prevent race conditions
+    isProcessingRef.current = true
+    setSessionState(SESSION_STATE.PROCESSING)
+    
+    try {
+      mediaRecorderRef.current.stop()
+      console.log('MediaRecorder stopped')
+    } catch (err) {
+      console.error('Failed to stop MediaRecorder:', err)
+      // Reset on error
+      isProcessingRef.current = false
+      setSessionState(SESSION_STATE.LISTENING)
     }
   }, [])
 
@@ -234,6 +275,23 @@ function App() {
       streamRef.current.getTracks().forEach(track => track.stop())
       streamRef.current = null
     }
+    
+    // Stop any playing audio
+    if (currentAudioRef.current) {
+      try {
+        currentAudioRef.current.pause()
+        currentAudioRef.current.src = ''
+        currentAudioRef.current = null
+      } catch (e) {
+        console.warn('Error stopping audio during cleanup:', e)
+      }
+    }
+    
+    // Clear audio timeout
+    if (audioTimeoutRef.current) {
+      clearTimeout(audioTimeoutRef.current)
+      audioTimeoutRef.current = null
+    }
 
     audioChunksRef.current = []
     isProcessingRef.current = false
@@ -282,11 +340,52 @@ function App() {
 
   // Resume listening after response
   const resumeListening = () => {
-    console.log('Resuming continuous listening...')
+    console.log('=== RESUMING LISTENING ===')
+    console.log('Before resume - processing:', isProcessingRef.current, 'state:', sessionStateRef.current, 'MediaRecorder:', mediaRecorderRef.current?.state)
+    
+    // Clear any existing audio timeout
+    if (audioTimeoutRef.current) {
+      clearTimeout(audioTimeoutRef.current)
+      audioTimeoutRef.current = null
+    }
+    
+    // Stop and cleanup current audio if playing
+    if (currentAudioRef.current) {
+      try {
+        currentAudioRef.current.pause()
+        currentAudioRef.current.src = ''
+        currentAudioRef.current = null
+      } catch (e) {
+        console.warn('Error cleaning up audio:', e)
+      }
+    }
+    
+    // Clear audio chunks from any previous incomplete recordings
+    audioChunksRef.current = []
+    
+    // Reset all state flags BEFORE transitioning state
     isProcessingRef.current = false
     resetSpeechState()
+    
+    // Ensure MediaRecorder is in inactive state
+    if (mediaRecorderRef.current) {
+      const recorderState = mediaRecorderRef.current.state
+      if (recorderState === 'recording' || recorderState === 'paused') {
+        console.warn('MediaRecorder still active during resume, stopping it. State:', recorderState)
+        try {
+          mediaRecorderRef.current.stop()
+        } catch (e) {
+          console.warn('Error stopping MediaRecorder during resume:', e)
+        }
+      }
+    }
+    
+    // Transition to LISTENING state
     setSessionState(SESSION_STATE.LISTENING)
     setStatus("🎙️ Ready for your next question... Speak anytime.")
+    
+    console.log('After resume - processing:', isProcessingRef.current, 'state:', SESSION_STATE.LISTENING, 'MediaRecorder:', mediaRecorderRef.current?.state)
+    console.log('=== READY FOR NEXT INPUT ===')
   }
 
   // Process audio and get AI response
@@ -295,12 +394,15 @@ function App() {
     if (!audioBlob || audioBlob.size === 0) {
       console.error('Invalid audio blob - size is 0')
       setStatus("Recording failed. Please try again.")
+      isProcessingRef.current = false
       resumeListening()
       return
     }
 
     console.log(`Processing audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`)
     
+    // Ensure processing state is set
+    isProcessingRef.current = true
     setSessionState(SESSION_STATE.PROCESSING)
     setStatus("🤔 Processing...")
 
@@ -310,7 +412,6 @@ function App() {
 
       const response = await sendAudio(
         audioBlob,
-        selectedPersonaId,
         userLocation.latitude,
         userLocation.longitude,
         isFirstMessage
@@ -352,18 +453,47 @@ function App() {
         const responseBlob = base64ToAudioBlob(response.audio_base64)
         const audioUrl = URL.createObjectURL(responseBlob)
         const audio = new Audio(audioUrl)
+        currentAudioRef.current = audio
+
+        let hasEnded = false
+        
+        const cleanup = () => {
+          if (hasEnded) return
+          hasEnded = true
+          
+          URL.revokeObjectURL(audioUrl)
+          currentAudioRef.current = null
+          
+          if (audioTimeoutRef.current) {
+            clearTimeout(audioTimeoutRef.current)
+            audioTimeoutRef.current = null
+          }
+          
+          resumeListening()
+        }
 
         audio.onended = () => {
-          URL.revokeObjectURL(audioUrl)
-          resumeListening()
+          console.log('Audio playback ended normally')
+          cleanup()
         }
 
-        audio.onerror = () => {
-          URL.revokeObjectURL(audioUrl)
-          resumeListening()
+        audio.onerror = (e) => {
+          console.error('Audio playback error:', e)
+          cleanup()
         }
 
-        await audio.play()
+        try {
+          await audio.play()
+          
+          // Safety timeout: force resume after 30 seconds
+          audioTimeoutRef.current = setTimeout(() => {
+            console.warn('Audio playback timeout - forcing resume')
+            cleanup()
+          }, 30000)
+        } catch (playError) {
+          console.error('Error playing audio:', playError)
+          cleanup()
+        }
       } else {
         setStatus(response.response_text || "Ready for your next question...")
         resumeListening()
@@ -409,8 +539,7 @@ function App() {
               const weatherData = await getWeather(
                 null,
                 position.coords.latitude,
-                position.coords.longitude,
-                selectedPersonaId
+                position.coords.longitude
               )
               setStatus(weatherData.formatted_response)
             } catch (error) {
@@ -421,7 +550,7 @@ function App() {
             const location = prompt('Enter your city name for weather:')
             if (location) {
               try {
-                const weatherData = await getWeather(location, null, null, selectedPersonaId)
+                const weatherData = await getWeather(location, null, null)
                 setStatus(weatherData.formatted_response)
               } catch (err) {
                 setStatus(`Couldn't find weather for ${location}.`)
@@ -434,7 +563,7 @@ function App() {
       } else {
         const location = prompt('Enter your city name for weather:')
         if (location) {
-          const weatherData = await getWeather(location, null, null, selectedPersonaId)
+          const weatherData = await getWeather(location, null, null)
           setStatus(weatherData.formatted_response)
         } else {
           setStatus("I need a location to check the weather!")
@@ -447,69 +576,12 @@ function App() {
 
   const handleDateTime = async () => {
     try {
-      const dateTimeData = await getDateTime('Asia/Kolkata', selectedPersonaId)
+      const dateTimeData = await getDateTime('Asia/Kolkata')
       setStatus(dateTimeData.formatted_response)
     } catch (error) {
       setStatus("Couldn't get the time right now.")
     }
   }
-
-  const handleCreatePersona = async () => {
-    if (!newPersonaName.trim() || !newPersonaPrompt.trim()) return
-
-    try {
-      await createPersona({
-        name: newPersonaName,
-        base_prompt: newPersonaPrompt
-      })
-      setNewPersonaName('')
-      setNewPersonaPrompt('')
-      setShowPersonaModal(false)
-      loadPersonas()
-    } catch (error) {
-      console.error('Failed to create persona:', error)
-    }
-  }
-
-  const handleDeletePersona = async (id) => {
-    try {
-      await deletePersona(id)
-      loadPersonas()
-    } catch (error) {
-      console.error('Failed to delete persona:', error)
-    }
-  }
-
-  const handleEditPersona = (persona) => {
-    setEditingPersonaId(persona.id)
-    setEditPersonaName(persona.name)
-    setEditPersonaPrompt(persona.base_prompt)
-  }
-
-  const handleUpdatePersona = async (id) => {
-    if (!editPersonaName.trim() || !editPersonaPrompt.trim()) return
-
-    try {
-      await updatePersona(id, {
-        name: editPersonaName,
-        base_prompt: editPersonaPrompt
-      })
-      setEditingPersonaId(null)
-      setEditPersonaName('')
-      setEditPersonaPrompt('')
-      loadPersonas()
-    } catch (error) {
-      console.error('Failed to update persona:', error)
-    }
-  }
-
-  const handleCancelEdit = () => {
-    setEditingPersonaId(null)
-    setEditPersonaName('')
-    setEditPersonaPrompt('')
-  }
-
-  const selectedPersona = personas.find(p => p.id === selectedPersonaId)
 
   const getToneEmoji = (tone) => {
     const emojis = {
@@ -541,32 +613,11 @@ function App() {
       <header className="header">
         <h1 className="title">
           <span className="title-icon">🎙️</span>
-          Voice Companion
+          AI Voice Companion
         </h1>
-        <button
-          className="persona-btn"
-          onClick={() => setShowPersonaModal(true)}
-        >
-          ⚙️ Personas
-        </button>
       </header>
 
       <main className="main-content">
-        {/* Persona Selector */}
-        <div className="persona-selector">
-          <div className="persona-chips">
-            {personas.map(persona => (
-              <button
-                key={persona.id}
-                className={`persona-chip ${selectedPersonaId === persona.id ? 'active' : ''}`}
-                onClick={() => setSelectedPersonaId(persona.id)}
-              >
-                {persona.name}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Chat History */}
         <div className="chat-container">
           <div className="chat-history">
@@ -656,114 +707,6 @@ function App() {
           </button>
         </div>
       </main>
-
-      {/* Persona Modal */}
-      {showPersonaModal && (
-        <div className="modal-overlay" onClick={() => setShowPersonaModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Manage Personas</h2>
-              <button className="close-btn" onClick={() => setShowPersonaModal(false)}>×</button>
-            </div>
-
-            <div className="modal-body">
-              {/* Existing Personas */}
-              <div className="persona-list">
-                {personas.map(persona => (
-                  <div key={persona.id} className="persona-item">
-                    {editingPersonaId === persona.id ? (
-                      // Edit mode
-                      <div className="persona-edit-form">
-                        <input
-                          type="text"
-                          className="persona-input"
-                          value={editPersonaName}
-                          onChange={(e) => setEditPersonaName(e.target.value)}
-                          placeholder="Persona name"
-                        />
-                        <textarea
-                          className="persona-textarea"
-                          value={editPersonaPrompt}
-                          onChange={(e) => setEditPersonaPrompt(e.target.value)}
-                          placeholder="Base prompt"
-                          rows={3}
-                        />
-                        <div className="edit-actions">
-                          <button
-                            className="save-btn"
-                            onClick={() => handleUpdatePersona(persona.id)}
-                          >
-                            ✓ Save
-                          </button>
-                          <button
-                            className="cancel-btn"
-                            onClick={handleCancelEdit}
-                          >
-                            ✕ Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      // View mode
-                      <>
-                        <div className="persona-info">
-                          <span className="persona-name">
-                            {persona.is_default && '★ '}
-                            {persona.name}
-                          </span>
-                          <span className="persona-preview">
-                            {persona.base_prompt.substring(0, 60)}...
-                          </span>
-                        </div>
-                        <div className="persona-actions">
-                          <button
-                            className="edit-btn"
-                            onClick={() => handleEditPersona(persona)}
-                          >
-                            ✏️
-                          </button>
-                          <button
-                            className="delete-btn"
-                            onClick={() => handleDeletePersona(persona.id)}
-                          >
-                            🗑️
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Create New Persona */}
-              <div className="create-persona">
-                <h3>Create New Persona</h3>
-                <input
-                  type="text"
-                  placeholder="Persona name (e.g., 'Calm Advisor')"
-                  value={newPersonaName}
-                  onChange={(e) => setNewPersonaName(e.target.value)}
-                  className="persona-input"
-                />
-                <textarea
-                  placeholder="Base prompt - describe the personality, tone, and how this persona should respond..."
-                  value={newPersonaPrompt}
-                  onChange={(e) => setNewPersonaPrompt(e.target.value)}
-                  className="persona-textarea"
-                  rows={4}
-                />
-                <button
-                  className="create-btn"
-                  onClick={handleCreatePersona}
-                  disabled={!newPersonaName.trim() || !newPersonaPrompt.trim()}
-                >
-                  Create Persona
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
