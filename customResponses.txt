@@ -1,0 +1,273 @@
+Category 1: Active Listening Signals (20 phrases)
+Use these to show you're engaged and following along
+Mm-hmm
+I hear you
+Go on
+I'm listening
+Okay
+Right
+I see
+Uh-huh
+Yes
+Got it
+I understand
+Tell me more
+And then?
+What happened next?
+I'm here
+Keep going
+I'm with you
+Mhm
+Yeah
+I follow
+
+Category 2: Neutral Acknowledgments (15 phrases)
+Non-committal responses that don't impose judgment
+I see what you mean
+That makes sense
+Fair enough
+Okay, I understand
+Noted
+I get it
+Alright
+Sure
+Understood
+I can see that
+That's clear
+Point taken
+Okay then
+Got you
+I see where you're coming from
+
+Category 3: Validating Responses (15 phrases)
+Gentle validation without over-emphasizing
+That sounds tough
+That's a lot to handle
+I can imagine
+That must be difficult
+Sounds challenging
+That's not easy
+I hear the struggle in that
+That seems hard
+Quite a situation
+That's complicated
+Sounds like a lot
+That's heavy
+I can see why you'd feel that way
+Makes sense you'd think that
+That's understandable
+
+Category 4: Positive Acknowledgments (15 phrases)
+For when user shares something good or makes progress
+That's nice
+Good to hear
+Sounds good
+That's great
+How nice
+That's wonderful
+Lovely
+That's positive
+Good for you
+That's a good thing
+Nice one
+That works
+Sounds promising
+That's encouraging
+Pleasant to hear
+
+Category 5: Excited/Celebratory (10 phrases)
+For genuinely exciting moments
+Oh wow
+Really?
+No way
+That's amazing
+Fantastic
+How exciting
+Wonderful news
+That's brilliant
+Incredible
+That's something
+
+Category 6: Thoughtful Pauses (10 phrases)
+When user seems to be processing or needs space
+Take your time
+No rush
+Whenever you're ready
+I'm here
+It's okay
+That's alright
+No pressure
+Just thinking it through
+Processing that
+Fair
+
+Category 7: Encouraging Continuation (10 phrases)
+Gentle prompts to keep sharing
+What else?
+Anything more?
+How so?
+In what way?
+Tell me about that
+What do you mean?
+Can you say more?
+Like what?
+Such as?
+For instance?
+
+Category 8: Reflective Acknowledgments (10 phrases)
+Showing you're thinking about what they said
+Interesting
+Hm, okay
+I see what you're saying
+That's something to think about
+Worth considering
+Good point
+That's true
+You're right about that
+Can't argue with that
+That's fair to say
+
+Category 9: Empathetic Sounds (5 phrases)
+Emotional acknowledgment without words
+Aww
+Oh
+Ah
+Ohh
+Hmm
+
+Category 10: Neutral & Active Listening (The "Nods")
+Use these when the user is simply narrating a story or explaining a situation and needs to know you are still there.
+Hmm.
+Okay.
+I see.
+Right.
+Uh-huh.
+Got it.
+I hear you.
+Go on.
+Interesting.
+Fair enough.
+Noted.
+Check.
+I’m with you.
+Understood.
+Makes sense.
+Sure.
+I follow.
+Okay, then.
+Right on.
+I’m listening.
+Still here.
+Go ahead.
+Alright.
+Yup.
+Mmhmm.
+
+Category 11: Positive & Celebrating
+Use these when the user shares a win, a good idea, or something exciting.
+That’s great!
+Sounds good.
+Nice!
+Awesome.
+Very cool.
+That’s amazing.
+Good job.
+Love that.
+Way to go.
+That’s a win.
+Brilliant.
+Sounds fun.
+Fantastic.
+That’s the spirit.
+Sweet!
+Excellent.
+Good for you.
+I like that.
+Sounds promising.
+Perfect.
+Hooray!
+That’s huge.
+Keep it up.
+Impressive.
+High five.
+
+Category 12: Empathy & Validation (For Venting)
+Use these when the user is frustrated, angry, or venting. These validate feelings without offering solutions.
+That’s rough.
+I get it.
+That sucks.
+That sounds hard.
+Oof.
+I understand.
+That’s frustrating.
+No fun.
+That’s annoying.
+I can imagine.
+That’s heavy.
+Bummer.
+I hear the frustration.
+That’s tough.
+I feel you.
+That’s valid.
+Sorry to hear that.
+Oh, man.
+That’s a lot.
+It happens.
+I bet.
+Seriously?
+That’s tiring.
+I’m sorry.
+Sounds draining.
+
+Category 13: Curiosity & Continuers
+Use these when the user pauses and you want to encourage them to keep talking without steering the topic.
+And then?
+Tell me more.
+Really?
+Then what?
+How come?
+Example?
+Say more.
+Keep going.
+What else?
+Oh, really?
+Is that so?
+Elaborate?
+No way.
+Describe it.
+And?
+
+Category 14: Logic & Brainstorming (Writing/Coding mode)
+Use these when the user is "rubber ducking" code or working through a plot point.
+Good point.
+Logic holds up.
+Sounds solid.
+Good angle.
+True.
+That works.
+Clever.
+Why not?
+Good thought.
+Exactly.
+
+Usage Guidelines
+Frequency Recommendations:
+High frequency (50-60%): Categories 1-2 (Active Listening & Neutral)
+Medium frequency (25-30%): Categories 3-4 (Validating & Positive)
+Low frequency (10-15%): Categories 5-7 (Excited, Pauses, Encouraging)
+Minimal frequency (5%): Categories 8-9 (Reflective & Empathetic Sounds)
+Context-Based Selection:
+User is venting/frustrated: Use Categories 1, 3, 6
+User is sharing good news: Use Categories 4, 5
+User is thinking/processing: Use Categories 1, 6, 8
+User is telling a story: Use Categories 1, 2, 7
+User sounds sad/down: Use Categories 1, 3, 6
+Timing:
+Vary the phrases to avoid repetition
+Match the energy level of the user (calm vs. excited)
+Keep responses under 3 words when possible
+Voice Characteristics:
+Tone: Warm, gentle, non-judgmental
+Pace: Slightly slower than the user's pace
+Volume: Moderate, not overpowering
+Pitch: Natural, conversational range
