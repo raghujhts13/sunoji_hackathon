@@ -55,6 +55,8 @@ tmp/
 *.json
 !package.json
 !package-lock.json
+backend/sunoji-companion-ffa5a4d51d9f.json
+backend/gen-lang-client-0843070407-c2121d34eee3.json
 
 # Mobile app (excluded from version control)
 mobile/
